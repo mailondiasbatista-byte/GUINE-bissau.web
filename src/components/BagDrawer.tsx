@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { CheckCircle2, MessageCircle, Minus, Plus, Trash2, X } from 'lucide-react';
+import { CheckCircle2, MessageCircle, Minus, Plus, Trash2, X, AlertCircle } from 'lucide-react';
 import { ProductItem, WHATSAPP_NUMBERS } from '../data/products';
+import { AdminProductStock } from './AdminPanel';
 
 export interface BagLineItem {
   product: ProductItem;
@@ -11,6 +12,7 @@ export interface BagLineItem {
 interface BagDrawerProps {
   isOpen: boolean;
   items: BagLineItem[];
+  stockData: Record<string, AdminProductStock>;
   onClose: () => void;
   onUpdateQty: (productId: string, size: string, delta: number) => void;
   onRemoveItem: (productId: string, size: string) => void;
@@ -20,6 +22,7 @@ interface BagDrawerProps {
 export const BagDrawer: React.FC<BagDrawerProps> = ({
   isOpen,
   items,
+  stockData,
   onClose,
   onUpdateQty,
   onRemoveItem,
@@ -76,7 +79,7 @@ export const BagDrawer: React.FC<BagDrawerProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Cabeçalho da Gaveta */}
-        <div className="px-6 py-5 flex items-center justify-between bg-white">
+        <div className="px-6 py-5 flex items-center justify-between bg-white border-b border-black/5">
           <div>
             <div className="flex items-center gap-1.5 text-[#25D366] font-bold text-xs uppercase tracking-wider">
               <MessageCircle className="w-4 h-4 text-[#25D366]" />
@@ -129,67 +132,91 @@ export const BagDrawer: React.FC<BagDrawerProps> = ({
                 </div>
 
                 <ul className="bg-white rounded-2xl p-3 space-y-3">
-                  {items.map(({ product, size, quantity }) => (
-                    <li key={`${product.id}-${size}`} className="flex gap-3">
-                      <div className="w-16 h-20 bg-[#EFEFEF] rounded-lg overflow-hidden shrink-0 flex items-center justify-center p-1">
-                        <img
-                          src={product.frontImage}
-                          alt={product.name}
-                          referrerPolicy="no-referrer"
-                          className="w-full h-full object-contain mix-blend-multiply"
-                        />
-                      </div>
+                  {items.map(({ product, size, quantity }) => {
+                    const prodStock = stockData[product.id];
+                    const maxStockForSize = prodStock?.stockPerSize[size] ?? 0;
+                    const isAtMaxStock = quantity >= maxStockForSize;
 
-                      <div className="flex-1 min-w-0 flex flex-col justify-between">
-                        <div>
-                          <div className="flex items-start justify-between gap-2">
-                            <h3 className="text-xs font-bold text-[#111110] truncate">
-                              {product.name}
-                            </h3>
-                            <span className="text-xs font-mono tabular-nums font-bold text-[#111110] shrink-0">
-                              {product.priceMAD * quantity} MAD
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-[#666660]">
-                            Tamanho {size} · {product.priceMAD} MAD cada
-                          </p>
-                        </div>
-
-                        <div className="flex items-center justify-between mt-2">
-                          <div className="inline-flex items-center rounded-lg bg-[#EFEFEF]">
-                            <button
-                              type="button"
-                              onClick={() => onUpdateQty(product.id, size, -1)}
-                              aria-label="Diminuir"
-                              className="w-6 h-6 flex items-center justify-center text-[#555550] hover:text-[#111110] cursor-pointer"
-                            >
-                              <Minus className="w-3 h-3" />
-                            </button>
-                            <span className="px-2 text-xs font-mono tabular-nums font-bold text-[#111110]">
-                              {quantity}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => onUpdateQty(product.id, size, 1)}
-                              aria-label="Aumentar"
-                              className="w-6 h-6 flex items-center justify-center text-[#555550] hover:text-[#111110] cursor-pointer"
-                            >
-                              <Plus className="w-3 h-3" />
-                            </button>
+                    return (
+                      <li key={`${product.id}-${size}`} className="flex flex-col gap-2 pb-2 border-b border-black/5 last:border-0 last:pb-0">
+                        <div className="flex gap-3">
+                          <div className="w-16 h-20 bg-[#EFEFEF] rounded-lg overflow-hidden shrink-0 flex items-center justify-center p-1">
+                            <img
+                              src={product.frontImage}
+                              alt={product.name}
+                              referrerPolicy="no-referrer"
+                              className="w-full h-full object-contain mix-blend-multiply"
+                            />
                           </div>
 
-                          <button
-                            type="button"
-                            onClick={() => onRemoveItem(product.id, size)}
-                            aria-label={`Remover ${product.name}`}
-                            className="text-[#888880] hover:text-[#A2141E] transition-colors p-1 cursor-pointer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          <div className="flex-1 min-w-0 flex flex-col justify-between">
+                            <div>
+                              <div className="flex items-start justify-between gap-2">
+                                <h3 className="text-xs font-bold text-[#111110] truncate">
+                                  {product.name}
+                                </h3>
+                                <span className="text-xs font-mono tabular-nums font-bold text-[#111110] shrink-0">
+                                  {product.priceMAD * quantity} MAD
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-[#666660]">
+                                Tamanho {size} · {product.priceMAD} MAD cada
+                              </p>
+                            </div>
+
+                            <div className="flex items-center justify-between mt-2">
+                              <div className="inline-flex items-center rounded-lg bg-[#EFEFEF]">
+                                <button
+                                  type="button"
+                                  onClick={() => onUpdateQty(product.id, size, -1)}
+                                  aria-label="Diminuir"
+                                  className="w-6 h-6 flex items-center justify-center text-[#555550] hover:text-[#111110] cursor-pointer"
+                                >
+                                  <Minus className="w-3 h-3" />
+                                </button>
+                                <span className="px-2 text-xs font-mono tabular-nums font-bold text-[#111110]">
+                                  {quantity}
+                                </span>
+                                <button
+                                  type="button"
+                                  disabled={isAtMaxStock}
+                                  onClick={() => onUpdateQty(product.id, size, 1)}
+                                  aria-label="Aumentar"
+                                  title={isAtMaxStock ? `Limite de estoque atingido (${maxStockForSize} disponíveis)` : 'Adicionar mais um'}
+                                  className={`w-6 h-6 flex items-center justify-center ${
+                                    isAtMaxStock
+                                      ? 'text-gray-300 opacity-40 cursor-not-allowed'
+                                      : 'text-[#555550] hover:text-[#111110] cursor-pointer'
+                                  }`}
+                                >
+                                  <Plus className="w-3 h-3" />
+                                </button>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => onRemoveItem(product.id, size)}
+                                aria-label={`Remover ${product.name}`}
+                                className="text-[#888880] hover:text-[#A2141E] transition-colors p-1 cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </li>
-                  ))}
+
+                        {/* Aviso discreto quando limite de estoque for atingido */}
+                        {isAtMaxStock && (
+                          <div className="flex items-center gap-1.5 text-[10px] text-[#A2141E] font-bold bg-[#A2141E]/10 px-2 py-1 rounded-md">
+                            <AlertCircle className="w-3 h-3 shrink-0" />
+                            <span>
+                              Limite de estoque atingido (Apenas {maxStockForSize} {maxStockForSize === 1 ? 'disponível' : 'disponíveis'})
+                            </span>
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
 
@@ -281,7 +308,7 @@ export const BagDrawer: React.FC<BagDrawerProps> = ({
 
         {/* Rodapé da Gaveta com Botão de Ação WhatsApp */}
         {items.length > 0 && (
-          <div className="px-6 py-4 bg-white space-y-3">
+          <div className="px-6 py-4 bg-white border-t border-black/5 space-y-3">
             <div className="flex justify-between items-center text-sm font-bold text-[#111110]">
               <span>Total da Encomenda</span>
               <span className="font-mono tabular-nums text-lg text-[#111110]">{totalMAD} MAD</span>

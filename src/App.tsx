@@ -11,29 +11,133 @@ import {
   MapPin,
   RotateCcw,
   Info,
+  Lock,
+  PackageCheck,
+  XCircle,
 } from 'lucide-react';
 import {
   DEFAULT_PRODUCT_INDEX,
   GarmentCategory,
-  PRODUCTS,
+  PRODUCTS as INITIAL_PRODUCTS,
   ProductItem,
   WHATSAPP_NUMBERS,
 } from './data/products';
 import { RackShowcase } from './components/RackShowcase';
 import { ProductDetailStudio } from './components/ProductDetailStudio';
+import { GalleryProductCard } from './components/GalleryProductCard';
 import { BagDrawer, BagLineItem } from './components/BagDrawer';
+import { AdminPanel, AdminProductStock } from './components/AdminPanel';
 import { downloadStandaloneHtml } from './utils/exportStandaloneHtml';
 
+const LOCAL_STORAGE_STOCK_KEY = 'djurtus_stock_data_v2';
+const LOCAL_STORAGE_PRODUCTS_KEY = 'djurtus_custom_products_v2';
+
+// Estado inicial de estoque padrão para todos os produtos
+const buildDefaultStockData = (productList: ProductItem[]): Record<string, AdminProductStock> => {
+  const stockMap: Record<string, AdminProductStock> = {};
+  productList.forEach((prod) => {
+    stockMap[prod.id] = {
+      id: prod.id,
+      name: prod.name,
+      subtitle: prod.subtitle,
+      priceMAD: prod.priceMAD,
+      category: prod.category,
+      frontImage: prod.frontImage,
+      backImage: prod.backImage,
+      isActive: true,
+      stockPerSize: { P: 5, M: 5, G: 5, GG: 5 },
+    };
+  });
+  return stockMap;
+};
+
 export default function App() {
+  // Estado dos Produtos (Inicial + Customizados salvos no localStorage)
+  const [productList, setProductList] = useState<ProductItem[]>(() => {
+    try {
+      const saved = localStorage.getItem(LOCAL_STORAGE_PRODUCTS_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (err) {
+      console.warn('Erro ao carregar produtos do localStorage:', err);
+    }
+    return INITIAL_PRODUCTS;
+  });
+
+  // Estado do Estoque por Produto e Tamanho
+  const [stockData, setStockData] = useState<Record<string, AdminProductStock>>(() => {
+    try {
+      const saved = localStorage.getItem(LOCAL_STORAGE_STOCK_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') return parsed;
+      }
+    } catch (err) {
+      console.warn('Erro ao carregar estoque do localStorage:', err);
+    }
+    return buildDefaultStockData(INITIAL_PRODUCTS);
+  });
+
   const [selectedIndex, setSelectedIndex] = useState<number>(DEFAULT_PRODUCT_INDEX);
   const [activeCategory, setActiveCategory] = useState<GarmentCategory>(GarmentCategory.ALL);
   const [bagItems, setBagItems] = useState<BagLineItem[]>([]);
   const [isBagOpen, setIsBagOpen] = useState<boolean>(false);
+  const [isAdminOpen, setIsAdminOpen] = useState<boolean>(false);
   const [catalogFailed, setCatalogFailed] = useState<Record<string, boolean>>({});
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [cardViewSides, setCardViewSides] = useState<Record<string, 'front' | 'back'>>({});
 
-  const selectedProduct = PRODUCTS[selectedIndex] ?? PRODUCTS[0];
+  // Detectar rota /admin na hash da URL
+  useEffect(() => {
+    const checkHashRoute = () => {
+      if (window.location.hash === '#admin' || window.location.pathname === '/admin') {
+        setIsAdminOpen(true);
+      }
+    };
+    checkHashRoute();
+    window.addEventListener('hashchange', checkHashRoute);
+    return () => window.removeEventListener('hashchange', checkHashRoute);
+  }, []);
+
+  // Persistir estoque no localStorage sempre que houver alteração
+  useEffect(() => {
+    try {
+      localStorage.setItem(LOCAL_STORAGE_STOCK_KEY, JSON.stringify(stockData));
+    } catch (err) {
+      console.warn('Erro ao salvar estoque no localStorage:', err);
+    }
+  }, [stockData]);
+
+  // Persistir lista de produtos customizada no localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(LOCAL_STORAGE_PRODUCTS_KEY, JSON.stringify(productList));
+    } catch (err) {
+      console.warn('Erro ao salvar produtos no localStorage:', err);
+    }
+  }, [productList]);
+
+  // REGRA 3: ATUALIZAÇÃO DA SACOLA EM TEMPO REAL QUANDO O ESTOQUE MUDAR NO ADMIN
+  useEffect(() => {
+    setBagItems((prev) =>
+      prev
+        .map((item) => {
+          const prodStock = stockData[item.product.id];
+          if (!prodStock || !prodStock.isActive) return null;
+          const maxAvailable = prodStock.stockPerSize[item.size] ?? 0;
+          if (maxAvailable <= 0) return null;
+          if (item.quantity > maxAvailable) {
+            return { ...item, quantity: maxAvailable };
+          }
+          return item;
+        })
+        .filter((item): item is BagLineItem => item !== null)
+    );
+  }, [stockData]);
+
+  const selectedProduct = productList[selectedIndex] ?? productList[0] ?? INITIAL_PRODUCTS[0];
   const totalBagCount = bagItems.reduce((sum, item) => sum + item.quantity, 0);
 
   // Navegação por teclado na arara de produtos (Seta esquerda / Seta direita)
@@ -44,14 +148,14 @@ export default function App() {
         return;
       }
       if (e.key === 'ArrowLeft') {
-        setSelectedIndex((prev) => (prev === 0 ? PRODUCTS.length - 1 : prev - 1));
+        setSelectedIndex((prev) => (prev === 0 ? productList.length - 1 : prev - 1));
       } else if (e.key === 'ArrowRight') {
-        setSelectedIndex((prev) => (prev === PRODUCTS.length - 1 ? 0 : prev + 1));
+        setSelectedIndex((prev) => (prev === productList.length - 1 ? 0 : prev + 1));
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
+  }, [productList.length]);
 
   const scrollToDetail = () => {
     const detailEl = document.getElementById('product-studio-detail');
@@ -61,22 +165,32 @@ export default function App() {
   };
 
   const handleSelectFromCatalog = (productId: string) => {
-    const foundIndex = PRODUCTS.findIndex((p) => p.id === productId);
+    const foundIndex = productList.findIndex((p) => p.id === productId);
     if (foundIndex >= 0) {
       setSelectedIndex(foundIndex);
       scrollToDetail();
     }
   };
 
+  // REGRA 1 & 2: VALIDAÇÃO RIGOROSA NO ADICIONAR
   const handleAddToBag = (product: ProductItem, size: string) => {
+    const prodStock = stockData[product.id];
+    if (!prodStock || !prodStock.isActive) return;
+
+    const maxStock = prodStock.stockPerSize[size] ?? 0;
+    const existingInBag = bagItems.find(
+      (item) => item.product.id === product.id && item.size === size
+    );
+    const currentQtyInBag = existingInBag?.quantity ?? 0;
+
+    // Se já atingiu o limite de estoque para esse tamanho, não adiciona mais
+    if (currentQtyInBag >= maxStock) return;
+
     setBagItems((prev) => {
-      const existing = prev.find(
-        (item) => item.product.id === product.id && item.size === size
-      );
-      if (existing) {
+      if (existingInBag) {
         return prev.map((item) =>
           item.product.id === product.id && item.size === size
-            ? { ...item, quantity: item.quantity + 1 }
+            ? { ...item, quantity: Math.min(item.quantity + 1, maxStock) }
             : item
         );
       }
@@ -84,15 +198,25 @@ export default function App() {
     });
   };
 
+  // REGRA 1 & 2: VALIDAÇÃO NO INCREMENTO DA SACOLA
   const handleUpdateBagQty = (productId: string, size: string, delta: number) => {
+    const prodStock = stockData[productId];
+    if (!prodStock || !prodStock.isActive) return;
+
+    const maxStock = prodStock.stockPerSize[size] ?? 0;
+
     setBagItems((prev) =>
       prev
-        .map((item) =>
-          item.product.id === productId && item.size === size
-            ? { ...item, quantity: item.quantity + delta }
-            : item
-        )
-        .filter((item) => item.quantity > 0)
+        .map((item) => {
+          if (item.product.id === productId && item.size === size) {
+            const nextQty = item.quantity + delta;
+            if (nextQty <= 0) return null;
+            if (nextQty > maxStock) return { ...item, quantity: maxStock };
+            return { ...item, quantity: nextQty };
+          }
+          return item;
+        })
+        .filter((item): item is BagLineItem => item !== null)
     );
   };
 
@@ -104,6 +228,10 @@ export default function App() {
 
   // Encomenda rápida no WhatsApp com mensagem formatada em português
   const handleDirectWhatsApp = (product: ProductItem, size: string = 'G') => {
+    const prodStock = stockData[product.id];
+    const availableQty = prodStock?.stockPerSize[size] ?? 0;
+    if (!prodStock?.isActive || availableQty <= 0) return;
+
     const message = encodeURIComponent(
       `*NOVA ENCOMENDA — DJURTUS.STUDIO MARROCOS* 🇬🇼🇲🇦\n\n` +
       `Olá! Gostaria de encomendar:\n` +
@@ -115,6 +243,39 @@ export default function App() {
       `Por favor confirmem a disponibilidade e o prazo de entrega. Obrigado!`
     );
     window.open(`https://wa.me/${WHATSAPP_NUMBERS[0].clean}?text=${message}`, '_blank');
+  };
+
+  const handleUpdateStockData = (updatedStockData: Record<string, AdminProductStock>) => {
+    setStockData(updatedStockData);
+  };
+
+  const handleAddProduct = (
+    newProduct: ProductItem,
+    initialStock: Record<string, number>
+  ) => {
+    setProductList((prev) => [...prev, newProduct]);
+    setStockData((prev) => ({
+      ...prev,
+      [newProduct.id]: {
+        id: newProduct.id,
+        name: newProduct.name,
+        subtitle: newProduct.subtitle,
+        priceMAD: newProduct.priceMAD,
+        category: newProduct.category,
+        frontImage: newProduct.frontImage,
+        backImage: newProduct.backImage,
+        isActive: true,
+        stockPerSize: initialStock,
+      },
+    }));
+  };
+
+  const handleResetStockData = () => {
+    setProductList(INITIAL_PRODUCTS);
+    const defaults = buildDefaultStockData(INITIAL_PRODUCTS);
+    setStockData(defaults);
+    localStorage.removeItem(LOCAL_STORAGE_STOCK_KEY);
+    localStorage.removeItem(LOCAL_STORAGE_PRODUCTS_KEY);
   };
 
   const handleExportHtml = async () => {
@@ -135,8 +296,8 @@ export default function App() {
 
   const filteredCatalog =
     activeCategory === GarmentCategory.ALL
-      ? PRODUCTS
-      : PRODUCTS.filter((p) => p.category === activeCategory);
+      ? productList
+      : productList.filter((p) => p.category === activeCategory);
 
   return (
     <div id="home" className="min-h-screen flex flex-col bg-[#f8f8f8] text-[#111110] w-full">
@@ -148,9 +309,9 @@ export default function App() {
           {/* Zona 1: Nome da Marca */}
           <a
             href="#home"
-            className="font-display text-lg font-black tracking-tight text-[#111110] whitespace-nowrap shrink-0"
+            className="font-display text-lg font-black tracking-tight text-[#111110] whitespace-nowrap shrink-0 flex items-center gap-2"
           >
-            DJURTUS.STUDIO
+            <span>DJURTUS.STUDIO</span>
           </a>
 
           {/* Zona 2: Links de Navegação Comerciais Limpos */}
@@ -168,7 +329,7 @@ export default function App() {
               href="#equipamentos"
               className="hover:text-[#111110] transition-colors whitespace-nowrap shrink-0"
             >
-              Equipamentos
+              Catálogo
             </a>
             <a
               href="#fatos-de-treino"
@@ -184,7 +345,7 @@ export default function App() {
             </a>
           </nav>
 
-          {/* Zona 3: Sacola de WhatsApp */}
+          {/* Zona 3: Sacola de WhatsApp & Indicador Admin */}
           <div className="flex items-center gap-3 shrink-0">
             <button
               type="button"
@@ -207,7 +368,12 @@ export default function App() {
       {/* ======================================================== */}
       <section className="relative z-10 pt-6 pb-6 w-full">
         <div className="w-full px-4 sm:px-6 md:px-10">
-          <div className="bg-[#111110] rounded-3xl p-8 md:p-12 text-white shadow-xl w-full">
+          <div
+            className="relative overflow-hidden rounded-3xl p-8 md:p-12 text-white shadow-xl w-full bg-cover bg-center bg-no-repeat"
+            style={{
+              backgroundImage: `linear-gradient(to right, rgba(17, 17, 16, 0.92), rgba(17, 17, 16, 0.72)), url('/bandeira.png')`,
+            }}
+          >
             <div className="flex flex-col lg:flex-row items-center justify-between gap-8">
               <div className="text-center lg:text-left space-y-3">
                 <p className="text-xs uppercase tracking-[0.2em] text-[#888880] font-bold">
@@ -258,8 +424,9 @@ export default function App() {
       {/* ======================================================== */}
       <main className="flex-1 w-full">
         <RackShowcase
-          products={PRODUCTS}
+          products={productList}
           selectedIndex={selectedIndex}
+          stockData={stockData}
           onSelectIndex={setSelectedIndex}
           onInspectProduct={scrollToDetail}
           onQuickWhatsApp={handleDirectWhatsApp}
@@ -270,12 +437,13 @@ export default function App() {
         {/* ======================================================== */}
         <ProductDetailStudio
           product={selectedProduct}
+          stockData={stockData}
           onAddToBag={handleAddToBag}
           onPrevProduct={() =>
-            setSelectedIndex((prev) => (prev === 0 ? PRODUCTS.length - 1 : prev - 1))
+            setSelectedIndex((prev) => (prev === 0 ? productList.length - 1 : prev - 1))
           }
           onNextProduct={() =>
-            setSelectedIndex((prev) => (prev === PRODUCTS.length - 1 ? 0 : prev + 1))
+            setSelectedIndex((prev) => (prev === productList.length - 1 ? 0 : prev + 1))
           }
         />
 
@@ -297,105 +465,31 @@ export default function App() {
               </p>
             </div>
 
-            {/* Lista dos Modelos com Frente e Costas Lado a Lado */}
+            {/* Lista dos Modelos com Seletor Interativo de Tamanhos e Estoque Real */}
             <div className="space-y-12">
-              {PRODUCTS.map((prod) => (
-                <div
-                  key={`gallery-${prod.id}`}
-                  className="bg-white rounded-3xl p-6 md:p-8 shadow-xs w-full"
-                >
-                  <div className="flex flex-col lg:flex-row items-center gap-8 w-full">
-                    {/* Par de Imagens: Frente e Costas */}
-                    <div className="grid grid-cols-2 gap-4 w-full lg:w-[50%] shrink-0">
-                      {/* Vista Frontal */}
-                      <div className="relative group bg-[#EFEFEF] rounded-2xl p-4 flex flex-col items-center">
-                        <div className="w-full aspect-[3/4] flex items-center justify-center overflow-hidden">
-                          <img
-                            src={prod.frontImage}
-                            alt={`${prod.name} — Frente`}
-                            loading="lazy"
-                            className="w-full h-full object-contain mix-blend-multiply group-hover:scale-105 transition-transform duration-300"
-                          />
-                        </div>
-                      </div>
+              {productList.map((prod) => {
+                const prodStock = stockData[prod.id] ?? {
+                  id: prod.id,
+                  name: prod.name,
+                  subtitle: prod.subtitle,
+                  priceMAD: prod.priceMAD,
+                  category: prod.category,
+                  frontImage: prod.frontImage,
+                  backImage: prod.backImage,
+                  isActive: true,
+                  stockPerSize: { P: 5, M: 5, G: 5, GG: 5 },
+                };
 
-                      {/* Vista de Costas */}
-                      <div className="relative group bg-[#EFEFEF] rounded-2xl p-4 flex flex-col items-center">
-                        <div className="w-full aspect-[3/4] flex items-center justify-center overflow-hidden">
-                          <img
-                            src={prod.backImage}
-                            alt={`${prod.name} — Costas`}
-                            loading="lazy"
-                            className="w-full h-full object-contain mix-blend-multiply group-hover:scale-105 transition-transform duration-300"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Especificações & Botão de Encomenda */}
-                    <div className="w-full lg:w-[50%] flex flex-col justify-between space-y-4">
-                      <div>
-                        <div className="flex items-center justify-between gap-3 flex-wrap">
-                          <h3 className="font-display text-xl md:text-2xl font-bold text-[#111110]">
-                            {prod.name}
-                          </h3>
-                          <span className="text-2xl font-mono tabular-nums font-black text-[#111110]">
-                            {prod.priceMAD} <span className="text-xs font-semibold text-[#666660]">MAD</span>
-                          </span>
-                        </div>
-                        <p className="text-xs font-bold text-[#666660] mt-1">
-                          {prod.subtitle} · {prod.colorway}
-                        </p>
-
-                        <p className="text-xs md:text-sm text-[#444440] leading-relaxed mt-3">
-                          {prod.heritageStory}
-                        </p>
-
-                        <div className="mt-4 pt-3 space-y-2 text-xs text-[#555550]">
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-[#111110]">Tecido:</span>
-                            <span>{prod.fabricSpec}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-[#111110]">Tamanhos:</span>
-                            <div className="flex gap-1.5 font-bold text-[#111110]">
-                              {prod.sizes.map((sz) => (
-                                <span
-                                  key={sz}
-                                  className="w-7 h-7 rounded-lg bg-[#EFEFEF] flex items-center justify-center text-xs"
-                                >
-                                  {sz}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Botões de Ação Direta */}
-                      <div className="pt-2 flex flex-col sm:flex-row gap-3">
-                        <button
-                          type="button"
-                          onClick={() => handleDirectWhatsApp(prod, 'G')}
-                          className="flex-1 py-3.5 px-4 rounded-xl bg-[#25D366] hover:bg-[#20ba59] text-white text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
-                        >
-                          <MessageCircle className="w-4 h-4" />
-                          <span>Pedir Este Modelo no WhatsApp ({prod.priceMAD} MAD)</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleAddToBag(prod, 'G')}
-                          className="py-3.5 px-4 rounded-xl bg-[#111110] hover:bg-[#222220] text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
-                        >
-                          <ShoppingBag className="w-4 h-4 text-[#25D366]" />
-                          <span>Adicionar</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
+                return (
+                  <GalleryProductCard
+                    key={`gallery-${prod.id}`}
+                    product={prod}
+                    prodStock={prodStock}
+                    onDirectWhatsApp={handleDirectWhatsApp}
+                    onAddToBag={handleAddToBag}
+                  />
+                );
+              })}
             </div>
           </div>
         </section>
@@ -445,6 +539,13 @@ export default function App() {
                 const currentSide = cardViewSides[prod.id] ?? 'front';
                 const displayedImg = currentSide === 'front' ? prod.frontImage : prod.backImage;
 
+                const prodStock = stockData[prod.id] ?? {
+                  isActive: true,
+                  stockPerSize: { P: 5, M: 5, G: 5, GG: 5 },
+                };
+                const totalStock = Object.values(prodStock.stockPerSize).reduce((a, b) => a + b, 0);
+                const isAvailable = prodStock.isActive && totalStock > 0;
+
                 return (
                   <div
                     key={prod.id}
@@ -457,6 +558,12 @@ export default function App() {
                     {/* Imagem do Produto com Botão de Alternar Frente/Costas */}
                     <div>
                       <div className="relative w-full aspect-[4/5] bg-[#EFEFEF] rounded-xl flex items-center justify-center p-3 mb-3 overflow-hidden">
+                        {!isAvailable && (
+                          <span className="absolute top-2 left-2 z-20 bg-[#A0A09C] text-white text-[10px] font-black uppercase px-2 py-0.5 rounded-full shadow-xs">
+                            Esgotado
+                          </span>
+                        )}
+
                         {!isImgFailed ? (
                           <img
                             src={displayedImg}
@@ -465,7 +572,9 @@ export default function App() {
                             onError={() =>
                               setCatalogFailed((prev) => ({ ...prev, [prod.id]: true }))
                             }
-                            className="w-full h-full object-contain mix-blend-multiply group-hover:scale-105 transition-transform duration-300"
+                            className={`w-full h-full object-contain mix-blend-multiply group-hover:scale-105 transition-transform duration-300 ${
+                              !isAvailable ? 'opacity-50' : 'opacity-100'
+                            }`}
                           />
                         ) : (
                           <div className="w-full h-full flex flex-col items-center justify-center text-center p-4">
@@ -515,14 +624,26 @@ export default function App() {
                         >
                           Ver Estúdio
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDirectWhatsApp(prod, 'G')}
-                          className="py-2 px-2 text-xs font-bold rounded-lg bg-[#25D366] hover:bg-[#20ba59] text-white transition-colors flex items-center justify-center gap-1 shadow-2xs cursor-pointer"
-                        >
-                          <MessageCircle className="w-3.5 h-3.5" />
-                          <span>Pedir</span>
-                        </button>
+
+                        {isAvailable ? (
+                          <button
+                            type="button"
+                            onClick={() => handleDirectWhatsApp(prod, 'G')}
+                            className="py-2 px-2 text-xs font-bold rounded-lg bg-[#25D366] hover:bg-[#20ba59] text-white transition-colors flex items-center justify-center gap-1 shadow-2xs cursor-pointer"
+                          >
+                            <MessageCircle className="w-3.5 h-3.5" />
+                            <span>Pedir</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled
+                            className="py-2 px-2 text-xs font-bold rounded-lg bg-[#A0A09C] text-white transition-colors flex items-center justify-center gap-1 cursor-not-allowed opacity-90"
+                          >
+                            <XCircle className="w-3.5 h-3.5" />
+                            <span>Esgotado</span>
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -638,11 +759,11 @@ export default function App() {
       </main>
 
       {/* ======================================================== */}
-      {/* RODAPÉ ELEGANTE & MINIMALISTA (FULL WIDTH)               */}
+      {/* RODAPÉ ELEGANTE & MINIMALISTA (COM BOTÃO ADMIN)          */}
       {/* ======================================================== */}
       <footer className="bg-[#111110] text-white py-12 w-full">
         <div className="w-full px-4 sm:px-6 md:px-10">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-6 pb-8">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-6 pb-8 border-b border-white/10">
             <div>
               <span className="font-display font-black text-xl text-white">DJURTUS.STUDIO</span>
               <p className="text-xs text-white/60 mt-1 max-w-md">
@@ -652,7 +773,7 @@ export default function App() {
 
             <div className="flex flex-wrap items-center gap-6 text-xs font-bold uppercase tracking-wider text-white/70">
               <a href="#home" className="hover:text-white transition-colors">Início</a>
-              <a href="#equipamentos" className="hover:text-white transition-colors">Equipamentos</a>
+              <a href="#equipamentos" className="hover:text-white transition-colors">Catálogo</a>
               <a href="#fatos-de-treino" className="hover:text-white transition-colors">Fatos de Treino</a>
               <a href="#contacto" className="hover:text-white transition-colors">Contactos</a>
             </div>
@@ -661,15 +782,27 @@ export default function App() {
           <div className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-white/50">
             <p>© {new Date().getFullYear()} DJURTUS.STUDIO. Todos os direitos reservados.</p>
 
-            <button
-              type="button"
-              disabled={isExporting}
-              onClick={handleExportHtml}
-              className="inline-flex items-center gap-1.5 text-xs text-white/70 hover:text-white transition-colors underline-offset-4 hover:underline cursor-pointer"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>{isExporting ? 'A descarregar...' : 'Descarregar index.html Independente'}</span>
-            </button>
+            <div className="flex items-center gap-4">
+              {/* Botão discreto para o Painel Admin */}
+              <button
+                type="button"
+                onClick={() => setIsAdminOpen(true)}
+                className="inline-flex items-center gap-1.5 text-xs text-white/70 hover:text-white transition-colors cursor-pointer bg-white/5 px-3 py-1.5 rounded-lg border border-white/10"
+              >
+                <Lock className="w-3.5 h-3.5 text-[#25D366]" />
+                <span>Painel Admin</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={isExporting}
+                onClick={handleExportHtml}
+                className="inline-flex items-center gap-1.5 text-xs text-white/70 hover:text-white transition-colors underline-offset-4 hover:underline cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>{isExporting ? 'A descarregar...' : 'Descarregar HTML'}</span>
+              </button>
+            </div>
           </div>
         </div>
       </footer>
@@ -680,10 +813,29 @@ export default function App() {
       <BagDrawer
         isOpen={isBagOpen}
         items={bagItems}
+        stockData={stockData}
         onClose={() => setIsBagOpen(false)}
         onUpdateQty={handleUpdateBagQty}
         onRemoveItem={handleRemoveBagItem}
         onClearBag={() => setBagItems([])}
+      />
+
+      {/* ======================================================== */}
+      {/* PAINEL DE ADMINISTRAÇÃO INTEGRADO (/admin)                */}
+      {/* ======================================================== */}
+      <AdminPanel
+        isOpen={isAdminOpen}
+        onClose={() => {
+          setIsAdminOpen(false);
+          if (window.location.hash === '#admin') {
+            window.history.pushState('', document.title, window.location.pathname);
+          }
+        }}
+        products={productList}
+        stockData={stockData}
+        onUpdateStock={handleUpdateStockData}
+        onAddProduct={handleAddProduct}
+        onResetStock={handleResetStockData}
       />
     </div>
   );

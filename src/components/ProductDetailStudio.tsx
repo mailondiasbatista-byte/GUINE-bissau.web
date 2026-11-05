@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
-import { Check, MessageCircle, Ruler, ShoppingBag, X } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Check, MessageCircle, Ruler, ShoppingBag, X, XCircle } from 'lucide-react';
 import { ProductItem, WHATSAPP_NUMBERS } from '../data/products';
 import { GarmentBackView } from './GarmentBackView';
 
 interface ProductDetailStudioProps {
   product: ProductItem;
+  stockData: Record<string, { isActive: boolean; stockPerSize: Record<string, number> }>;
   onAddToBag: (product: ProductItem, size: string) => void;
   onPrevProduct: () => void;
   onNextProduct: () => void;
@@ -12,6 +13,7 @@ interface ProductDetailStudioProps {
 
 export const ProductDetailStudio: React.FC<ProductDetailStudioProps> = ({
   product,
+  stockData,
   onAddToBag,
   onPrevProduct,
   onNextProduct,
@@ -22,13 +24,40 @@ export const ProductDetailStudio: React.FC<ProductDetailStudioProps> = ({
   const [isSizeGuideOpen, setIsSizeGuideOpen] = useState(false);
   const [imgFailed, setImgFailed] = useState(false);
 
+  const prodStock = stockData[product.id] ?? {
+    isActive: true,
+    stockPerSize: { P: 5, M: 5, G: 5, GG: 5 },
+  };
+
+  const hasAnyStock =
+    prodStock.isActive &&
+    Object.values(prodStock.stockPerSize).some((q) => q > 0);
+
+  // Auto-selecionar o primeiro tamanho disponível caso o tamanho atual esteja esgotado
+  useEffect(() => {
+    const currentQty = prodStock.stockPerSize[selectedSize] ?? 0;
+    if ((currentQty <= 0 || !prodStock.isActive) && hasAnyStock) {
+      const firstAvailable = product.sizes.find(
+        (sz) => (prodStock.stockPerSize[sz] ?? 0) > 0
+      );
+      if (firstAvailable) {
+        setSelectedSize(firstAvailable);
+      }
+    }
+  }, [product.id, stockData, selectedSize, prodStock, hasAnyStock]);
+
+  const selectedSizeStock = prodStock.stockPerSize[selectedSize] ?? 0;
+  const isSizeAvailable = prodStock.isActive && selectedSizeStock > 0;
+
   const handleAdd = () => {
+    if (!isSizeAvailable) return;
     onAddToBag(product, selectedSize);
     setJustAdded(true);
     window.setTimeout(() => setJustAdded(false), 1400);
   };
 
   const handleDirectWhatsAppOrder = () => {
+    if (!isSizeAvailable) return;
     const message = encodeURIComponent(
       `Olá Loja Djurtus Marrocos! Gostaria de encomendar:\n\n• Peça: ${product.name}\n• Tamanho: ${selectedSize}\n• Preço: ${product.priceMAD} MAD\n• Cor: ${product.colorway}\n\nPor favor, confirmem a disponibilidade para entrega em Marrocos. Obrigado!`
     );
@@ -39,11 +68,17 @@ export const ProductDetailStudio: React.FC<ProductDetailStudioProps> = ({
     <section
       id="product-studio-detail"
       aria-label="Detalhe do Produto em Estúdio"
-      className="py-12 md:py-16 bg-[#f2f2f2]"
+      className="py-12 md:py-16 bg-[#f2f2f2] w-full"
     >
-      <div className="max-w-[1020px] mx-auto px-6">
+      <div className="w-full px-4 sm:px-6 md:px-10">
         {/* Moldura centralizada de produto em alta definição */}
         <div className="relative mx-auto max-w-[440px] aspect-[3/4] flex items-center justify-center bg-[#EFEFEF] rounded-2xl p-4 shadow-sm">
+          {!hasAnyStock && (
+            <span className="absolute top-4 right-4 z-30 bg-[#A0A09C] text-white text-xs font-black uppercase tracking-wider px-3 py-1 rounded-full shadow-xs">
+              Produto Esgotado
+            </span>
+          )}
+
           {viewSide === 'front' ? (
             !imgFailed ? (
               <img
@@ -52,7 +87,9 @@ export const ProductDetailStudio: React.FC<ProductDetailStudioProps> = ({
                 alt={`${product.name} — Vista Frontal`}
                 referrerPolicy="no-referrer"
                 onError={() => setImgFailed(true)}
-                className="w-full h-full object-contain mix-blend-multiply transition-opacity duration-200 select-none"
+                className={`w-full h-full object-contain mix-blend-multiply transition-opacity duration-200 select-none ${
+                  !hasAnyStock ? 'opacity-50' : 'opacity-100'
+                }`}
               />
             ) : (
               <div className="w-full h-full flex flex-col items-center justify-center p-8 text-center">
@@ -66,7 +103,9 @@ export const ProductDetailStudio: React.FC<ProductDetailStudioProps> = ({
               src={product.backImage}
               alt={`${product.name} — Vista de Costas`}
               referrerPolicy="no-referrer"
-              className="w-full h-full object-contain mix-blend-multiply transition-opacity duration-200 select-none"
+              className={`w-full h-full object-contain mix-blend-multiply transition-opacity duration-200 select-none ${
+                !hasAnyStock ? 'opacity-50' : 'opacity-100'
+              }`}
             />
           ) : (
             <GarmentBackView key={`${product.id}-back`} product={product} />
@@ -166,38 +205,65 @@ export const ProductDetailStudio: React.FC<ProductDetailStudioProps> = ({
           </div>
 
           {/* Seletor de Tamanhos e Encomenda WhatsApp */}
-          <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 bg-white p-5 rounded-2xl shadow-sm">
-            <div className="flex items-center gap-3">
-              <span className="text-xs font-bold text-[#111110] whitespace-nowrap">Tamanho</span>
-              <div className="inline-flex items-center gap-1.5" role="radiogroup" aria-label="Selecionar tamanho">
-                {product.sizes.map((size) => {
-                  const active = selectedSize === size;
-                  return (
-                    <button
-                      key={size}
-                      type="button"
-                      role="radio"
-                      aria-checked={active}
-                      onClick={() => setSelectedSize(size)}
-                      className={`w-9 h-9 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
-                        active
-                          ? 'bg-[#111110] text-white'
-                          : 'bg-[#F2F2F0] text-[#333330] hover:bg-black/10'
-                      }`}
-                    >
-                      {size}
-                    </button>
-                  );
-                })}
+          <div className="mt-6 flex flex-col sm:flex-row items-[flex-start] sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl shadow-sm">
+            <div className="flex flex-col gap-2.5 w-full sm:w-auto">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-bold text-[#111110] whitespace-nowrap">Tamanho:</span>
+                <div className="inline-flex items-center gap-1.5 flex-wrap" role="radiogroup" aria-label="Selecionar tamanho">
+                  {product.sizes.map((size) => {
+                    const sizeQty = prodStock.stockPerSize[size] ?? 0;
+                    const active = selectedSize === size;
+                    const isSizeAvailableInStock = prodStock.isActive && sizeQty > 0;
+
+                    return (
+                      <button
+                        key={size}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        disabled={!isSizeAvailableInStock}
+                        onClick={() => setSelectedSize(size)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
+                          !isSizeAvailableInStock
+                            ? 'bg-gray-200 text-gray-400 line-through cursor-not-allowed opacity-50'
+                            : active
+                            ? 'bg-[#111110] text-white shadow-xs'
+                            : 'bg-[#F2F2F0] text-[#333330] hover:bg-black/10 cursor-pointer'
+                        }`}
+                        title={
+                          isSizeAvailableInStock
+                            ? `Estoque disponível: ${sizeQty} unidades`
+                            : `Tamanho ${size} Esgotado`
+                        }
+                      >
+                        {size} {!isSizeAvailableInStock ? '(Esgotado)' : ''}
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsSizeGuideOpen(true)}
+                  className="ml-1 inline-flex items-center gap-1 text-[11px] text-[#666660] hover:text-[#111110] underline underline-offset-4 cursor-pointer whitespace-nowrap shrink-0"
+                >
+                  <Ruler className="w-3.5 h-3.5" />
+                  <span>Medidas</span>
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => setIsSizeGuideOpen(true)}
-                className="ml-1 inline-flex items-center gap-1 text-[11px] text-[#666660] hover:text-[#111110] underline underline-offset-4 cursor-pointer whitespace-nowrap shrink-0"
-              >
-                <Ruler className="w-3.5 h-3.5" />
-                <span>Medidas</span>
-              </button>
+
+              {/* Exibição do Estoque em Tempo Real do Tamanho Selecionado */}
+              <div className="text-[11px] text-[#555550]">
+                {hasAnyStock ? (
+                  <span>
+                    Estoque disponível no tamanho <strong className="text-[#111110] font-bold">{selectedSize}</strong>:{' '}
+                    <span className={`font-mono font-bold ${selectedSizeStock > 0 ? 'text-[#111110]' : 'text-red-600'}`}>
+                      {selectedSizeStock > 0 ? `${selectedSizeStock} un.` : 'Esgotado'}
+                    </span>
+                  </span>
+                ) : (
+                  <span className="text-red-600 font-bold">Produto Esgotado em todos os tamanhos</span>
+                )}
+              </div>
             </div>
 
             {/* Preço em MAD e Botões de Ação */}
@@ -209,25 +275,40 @@ export const ProductDetailStudio: React.FC<ProductDetailStudioProps> = ({
               </div>
 
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleAdd}
-                  title="Adicionar à sacola"
-                  className={`p-2.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-                    justAdded ? 'bg-[#111110] text-white' : 'bg-[#EFEFEF] text-[#111110] hover:bg-[#111110] hover:text-white'
-                  }`}
-                >
-                  {justAdded ? <Check className="w-4 h-4" /> : <ShoppingBag className="w-4 h-4" />}
-                </button>
+                {hasAnyStock && isSizeAvailable ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleAdd}
+                      title="Adicionar à sacola"
+                      className={`p-2.5 rounded-lg text-xs font-medium transition-all shadow-xs ${
+                        justAdded
+                          ? 'bg-[#111110] text-white'
+                          : 'bg-[#EFEFEF] text-[#111110] hover:bg-[#111110] hover:text-white cursor-pointer'
+                      }`}
+                    >
+                      {justAdded ? <Check className="w-4 h-4" /> : <ShoppingBag className="w-4 h-4" />}
+                    </button>
 
-                <button
-                  type="button"
-                  onClick={handleDirectWhatsAppOrder}
-                  className="px-5 py-2.5 rounded-lg text-xs font-bold bg-[#25D366] text-white hover:bg-[#20ba59] inline-flex items-center gap-2 transition-all whitespace-nowrap cursor-pointer shadow-xs"
-                >
-                  <MessageCircle className="w-4 h-4" />
-                  <span>Pedir no WhatsApp</span>
-                </button>
+                    <button
+                      type="button"
+                      onClick={handleDirectWhatsAppOrder}
+                      className="px-5 py-2.5 rounded-lg text-xs font-bold bg-[#25D366] text-white hover:bg-[#20ba59] inline-flex items-center gap-2 transition-all whitespace-nowrap cursor-pointer shadow-xs"
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                      <span>Pedir no WhatsApp</span>
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    disabled
+                    className="px-5 py-2.5 rounded-lg text-xs font-bold bg-[#A0A09C] text-white inline-flex items-center gap-2 cursor-not-allowed whitespace-nowrap shadow-xs"
+                  >
+                    <XCircle className="w-4 h-4" />
+                    <span>{!hasAnyStock ? 'Produto Esgotado' : `Tamanho ${selectedSize} Esgotado`}</span>
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -247,7 +328,7 @@ export const ProductDetailStudio: React.FC<ProductDetailStudioProps> = ({
             className="w-full max-w-md bg-white rounded-2xl p-6 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between pb-4">
+            <div className="flex items-center justify-between pb-4 border-b border-black/10">
               <div>
                 <h3 id="size-guide-title" className="text-base font-bold text-[#111110]">
                   Tabela de Tamanhos Oficiais
