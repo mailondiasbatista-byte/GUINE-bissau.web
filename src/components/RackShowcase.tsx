@@ -47,24 +47,35 @@ export const RackShowcase: React.FC<RackShowcaseProps> = ({
         </p>
       </div>
 
-      {/* Arara Metálica de Estúdio Contínua */}
+      {/* Arara Metálica de Estúdio Contínua com Marquee Scroll */}
       <div className="relative w-full overflow-hidden">
+        {/* Máscara de degradê nas pontas para suavizar entrada e saída */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute left-0 top-0 bottom-0 w-12 sm:w-20 z-20 bg-gradient-to-r from-[#f8f8f8] to-transparent"
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute right-0 top-0 bottom-0 w-12 sm:w-20 z-20 bg-gradient-to-l from-[#f8f8f8] to-transparent"
+        />
+
         {/* Barra de aço escovado minimalista */}
         <div
           aria-hidden="true"
           className="absolute left-0 right-0 top-[20px] md:top-[26px] h-[4px] z-10 bg-[#D4D4D0]"
         />
 
-        {/* Peças penduradas na arara */}
-        <div className="w-full px-4 sm:px-6 md:px-10">
+        {/* Peças penduradas na arara com Marquee Scroll */}
+        <div className="w-full overflow-hidden">
           <div
             role="listbox"
-            aria-label="Peças da Coleção Djurtus"
-            className="flex items-start justify-start md:justify-center gap-3 sm:gap-6 overflow-x-auto no-scrollbar pt-[16px] md:pt-[20px] pb-6 snap-x snap-mandatory"
+            aria-label="Peças da Coleção Djurtus em Marquee Scroll"
+            className="flex items-start gap-4 sm:gap-6 pt-[16px] md:pt-[20px] pb-6 animate-marquee cursor-pointer select-none"
           >
-            {products.map((item, idx) => {
-              const isSelected = idx === selectedIndex;
-              const hasFailed = Boolean(failedImages[item.id]);
+            {[...products, ...products, ...products, ...products].map((item, idx) => {
+              const realIndex = idx % products.length;
+              const isSelected = realIndex === selectedIndex;
+              const hasFailed = Boolean(failedImages[`${item.id}-${idx}`] || failedImages[item.id]);
 
               const itemStockInfo = stockData[item.id] ?? {
                 isActive: true,
@@ -75,15 +86,15 @@ export const RackShowcase: React.FC<RackShowcaseProps> = ({
 
               return (
                 <button
-                  key={item.id}
+                  key={`${item.id}-marquee-${idx}`}
                   type="button"
                   role="option"
                   aria-selected={isSelected}
-                  onClick={() => onSelectIndex(idx)}
-                  className={`group relative shrink-0 snap-center focus:outline-none transition-all duration-300 ${
+                  onClick={() => onSelectIndex(realIndex)}
+                  className={`group relative shrink-0 focus:outline-none transition-all duration-300 ${
                     isSelected
-                      ? 'w-[210px] sm:w-[240px] md:w-[260px] z-20 opacity-100'
-                      : 'w-[140px] sm:w-[165px] md:w-[185px] z-10 opacity-70 hover:opacity-100'
+                      ? 'w-[200px] sm:w-[230px] md:w-[250px] z-20 opacity-100'
+                      : 'w-[140px] sm:w-[165px] md:w-[185px] z-10 opacity-80 hover:opacity-100'
                   }`}
                 >
                   {/* Gancho metálico minimalista */}
@@ -117,7 +128,7 @@ export const RackShowcase: React.FC<RackShowcaseProps> = ({
                           alt={`${item.name} — ${item.colorway}`}
                           referrerPolicy="no-referrer"
                           onError={() =>
-                            setFailedImages((prev) => ({ ...prev, [item.id]: true }))
+                            setFailedImages((prev) => ({ ...prev, [`${item.id}-${idx}`]: true }))
                           }
                           className="w-full h-full object-contain mix-blend-multiply select-none pointer-events-none transition-transform duration-300 group-hover:scale-105"
                         />
