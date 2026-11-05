@@ -1,0 +1,6 @@
+{
+  "name": "LOJA DJURTUS MARROCOS — Camisolas Oficiais Guiné-Bissau",
+  "description": "Camisolas oficiais e simples dos Djurtus disponíveis em Marrocos. Encomendas diretas através do WhatsApp sem pagamento de cartão online.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
