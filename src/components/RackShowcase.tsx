@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight, MessageCircle, XCircle } from 'lucide-react';
 import { ProductItem, WHATSAPP_NUMBERS } from '../data/products';
 
@@ -27,8 +27,22 @@ export const RackShowcase: React.FC<RackShowcaseProps> = ({
     stockPerSize: { P: 5, M: 5, G: 5, GG: 5 },
   };
 
+  const [activeClickedKey, setActiveClickedKey] = useState<string | null>(null);
+
   const totalStock = Object.values(prodStock.stockPerSize).reduce((a, b) => a + b, 0);
   const isAvailable = prodStock.isActive && totalStock > 0;
+
+  // O destaque temporário expira após 3 segundos e o item retorna ao tamanho uniforme original
+  useEffect(() => {
+    if (!activeClickedKey) return;
+    const timer = window.setTimeout(() => {
+      setActiveClickedKey(null);
+    }, 3000);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [activeClickedKey]);
 
   const handlePrev = () => {
     onSelectIndex(selectedIndex === 0 ? products.length - 1 : selectedIndex - 1);
@@ -74,8 +88,9 @@ export const RackShowcase: React.FC<RackShowcaseProps> = ({
           >
             {[...products, ...products, ...products, ...products].map((item, idx) => {
               const realIndex = idx % products.length;
-              const isSelected = realIndex === selectedIndex;
-              const hasFailed = Boolean(failedImages[`${item.id}-${idx}`] || failedImages[item.id]);
+              const itemKey = `${item.id}-marquee-${idx}`;
+              const isClickedHighlighted = itemKey === activeClickedKey;
+              const hasFailed = Boolean(failedImages[itemKey] || failedImages[item.id]);
 
               const itemStockInfo = stockData[item.id] ?? {
                 isActive: true,
@@ -86,15 +101,18 @@ export const RackShowcase: React.FC<RackShowcaseProps> = ({
 
               return (
                 <button
-                  key={`${item.id}-marquee-${idx}`}
+                  key={itemKey}
                   type="button"
                   role="option"
-                  aria-selected={isSelected}
-                  onClick={() => onSelectIndex(realIndex)}
-                  className={`group relative shrink-0 focus:outline-none transition-all duration-300 ${
-                    isSelected
-                      ? 'w-[200px] sm:w-[230px] md:w-[250px] z-20 opacity-100'
-                      : 'w-[140px] sm:w-[165px] md:w-[185px] z-10 opacity-80 hover:opacity-100'
+                  aria-selected={realIndex === selectedIndex}
+                  onClick={() => {
+                    onSelectIndex(realIndex);
+                    setActiveClickedKey(itemKey);
+                  }}
+                  className={`group relative shrink-0 focus:outline-none transition-all duration-300 w-[140px] sm:w-[165px] md:w-[185px] ${
+                    isClickedHighlighted
+                      ? 'z-20 opacity-100 scale-105'
+                      : 'z-10 opacity-85 hover:opacity-100'
                   }`}
                 >
                   {/* Gancho metálico minimalista */}
@@ -115,7 +133,7 @@ export const RackShowcase: React.FC<RackShowcaseProps> = ({
                     className={`relative p-3 rounded-xl transition-all duration-300 ${
                       !itemIsAvailable ? 'bg-[#E5E5E3] opacity-60' : 'bg-[#EFEFEF]'
                     } ${
-                      isSelected
+                      isClickedHighlighted
                         ? 'shadow-md scale-100 ring-2 ring-[#111110]'
                         : 'scale-95 group-hover:scale-98'
                     }`}
@@ -128,7 +146,7 @@ export const RackShowcase: React.FC<RackShowcaseProps> = ({
                           alt={`${item.name} — ${item.colorway}`}
                           referrerPolicy="no-referrer"
                           onError={() =>
-                            setFailedImages((prev) => ({ ...prev, [`${item.id}-${idx}`]: true }))
+                            setFailedImages((prev) => ({ ...prev, [itemKey]: true }))
                           }
                           className="w-full h-full object-contain mix-blend-multiply select-none pointer-events-none transition-transform duration-300 group-hover:scale-105"
                         />

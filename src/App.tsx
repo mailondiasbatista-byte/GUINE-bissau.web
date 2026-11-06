@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Download,
   MessageCircle,
   ShoppingBag,
   Phone,
@@ -27,7 +26,6 @@ import { ProductDetailStudio } from './components/ProductDetailStudio';
 import { GalleryProductCard } from './components/GalleryProductCard';
 import { BagDrawer, BagLineItem } from './components/BagDrawer';
 import { AdminPanel, AdminProductStock } from './components/AdminPanel';
-import { downloadStandaloneHtml } from './utils/exportStandaloneHtml';
 
 const LOCAL_STORAGE_STOCK_KEY = 'djurtus_stock_data_v2';
 const LOCAL_STORAGE_PRODUCTS_KEY = 'djurtus_custom_products_v2';
@@ -86,8 +84,19 @@ export default function App() {
   const [isBagOpen, setIsBagOpen] = useState<boolean>(false);
   const [isAdminOpen, setIsAdminOpen] = useState<boolean>(false);
   const [catalogFailed, setCatalogFailed] = useState<Record<string, boolean>>({});
-  const [isExporting, setIsExporting] = useState<boolean>(false);
   const [cardViewSides, setCardViewSides] = useState<Record<string, 'front' | 'back'>>({});
+  const [recentlySelectedCatalogId, setRecentlySelectedCatalogId] = useState<string | null>(null);
+
+  // O destaque de seleção temporário no catálogo expira em 3s
+  useEffect(() => {
+    if (!recentlySelectedCatalogId) return;
+    const timer = window.setTimeout(() => {
+      setRecentlySelectedCatalogId(null);
+    }, 3000);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [recentlySelectedCatalogId]);
 
   // Detectar rota /admin na hash da URL
   useEffect(() => {
@@ -168,6 +177,7 @@ export default function App() {
     const foundIndex = productList.findIndex((p) => p.id === productId);
     if (foundIndex >= 0) {
       setSelectedIndex(foundIndex);
+      setRecentlySelectedCatalogId(productId);
       scrollToDetail();
     }
   };
@@ -276,15 +286,6 @@ export default function App() {
     setStockData(defaults);
     localStorage.removeItem(LOCAL_STORAGE_STOCK_KEY);
     localStorage.removeItem(LOCAL_STORAGE_PRODUCTS_KEY);
-  };
-
-  const handleExportHtml = async () => {
-    setIsExporting(true);
-    try {
-      await downloadStandaloneHtml();
-    } finally {
-      setIsExporting(false);
-    }
   };
 
   const toggleCardSide = (prodId: string) => {
@@ -534,7 +535,7 @@ export default function App() {
             {/* Grelha de Produtos (Full width 5 colunas em telas grandes) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 w-full">
               {filteredCatalog.map((prod) => {
-                const isSelected = selectedProduct.id === prod.id;
+                const isRecentlySelected = prod.id === recentlySelectedCatalogId;
                 const isImgFailed = catalogFailed[prod.id];
                 const currentSide = cardViewSides[prod.id] ?? 'front';
                 const displayedImg = currentSide === 'front' ? prod.frontImage : prod.backImage;
@@ -550,8 +551,8 @@ export default function App() {
                   <div
                     key={prod.id}
                     className={`group relative bg-white rounded-2xl p-4 flex flex-col justify-between transition-all duration-200 ${
-                      isSelected
-                        ? 'shadow-md ring-2 ring-[#111110]'
+                      isRecentlySelected
+                        ? 'shadow-md ring-2 ring-[#111110] scale-[1.02]'
                         : 'shadow-xs hover:shadow-md'
                     }`}
                   >
@@ -791,16 +792,6 @@ export default function App() {
               >
                 <Lock className="w-3.5 h-3.5 text-[#25D366]" />
                 <span>Painel Admin</span>
-              </button>
-
-              <button
-                type="button"
-                disabled={isExporting}
-                onClick={handleExportHtml}
-                className="inline-flex items-center gap-1.5 text-xs text-white/70 hover:text-white transition-colors underline-offset-4 hover:underline cursor-pointer"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>{isExporting ? 'A descarregar...' : 'Descarregar HTML'}</span>
               </button>
             </div>
           </div>
