@@ -29,14 +29,55 @@ export const BagDrawer: React.FC<BagDrawerProps> = ({
   onClearBag,
 }) => {
   const [fullName, setFullName] = useState('');
-  const [cityCountry, setCityCountry] = useState('Casablanca, Marrocos');
+  const [selectedCity, setSelectedCity] = useState('Casablanca');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [notes, setNotes] = useState('');
+  const [promoCodeInput, setPromoCodeInput] = useState('');
+  const [appliedPromo, setAppliedPromo] = useState<{ code: string; discountPercent: number; freeShipping: boolean } | null>(null);
+  const [promoError, setPromoError] = useState('');
   const [selectedWhatsAppLine, setSelectedWhatsAppLine] = useState(WHATSAPP_NUMBERS[0].clean);
 
   if (!isOpen) return null;
 
-  const totalMAD = items.reduce((acc, item) => acc + item.product.priceMAD * item.quantity, 0);
+  const MOROCCO_CITIES = [
+    { name: 'Casablanca', time: '24h', fee: 0 },
+    { name: 'Rabat', time: '24h - 48h', fee: 0 },
+    { name: 'Marrakech', time: '24h - 48h', fee: 20 },
+    { name: 'Fès', time: '48h', fee: 20 },
+    { name: 'Tanger', time: '24h - 48h', fee: 20 },
+    { name: 'Agadir', time: '48h', fee: 30 },
+    { name: 'Kenitra', time: '24h - 48h', fee: 20 },
+    { name: 'Oujda', time: '48h - 72h', fee: 30 },
+    { name: 'Meknès', time: '48h', fee: 20 },
+  ];
+
+  const currentCityObj = MOROCCO_CITIES.find((c) => c.name === selectedCity) ?? MOROCCO_CITIES[0];
+
+  const subtotalMAD = items.reduce((acc, item) => acc + item.product.priceMAD * item.quantity, 0);
+  const discountPercent = appliedPromo?.discountPercent ?? 0;
+  const discountAmountMAD = Math.round((subtotalMAD * discountPercent) / 100);
+
+  const baseShippingFee = subtotalMAD >= 400 || appliedPromo?.freeShipping ? 0 : currentCityObj.fee;
+  const finalTotalMAD = Math.max(0, subtotalMAD - discountAmountMAD + baseShippingFee);
+
+  const handleApplyPromo = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPromoError('');
+    const cleanCode = promoCodeInput.trim().toUpperCase();
+
+    if (cleanCode === 'DJURTUS10' || cleanCode === 'DJURTUS') {
+      setAppliedPromo({ code: cleanCode, discountPercent: 10, freeShipping: false });
+      setPromoCodeInput('');
+    } else if (cleanCode === 'FRETEGRATIS' || cleanCode === 'MARROCOS') {
+      setAppliedPromo({ code: cleanCode, discountPercent: 0, freeShipping: true });
+      setPromoCodeInput('');
+    } else if (cleanCode === 'VIP20') {
+      setAppliedPromo({ code: cleanCode, discountPercent: 20, freeShipping: true });
+      setPromoCodeInput('');
+    } else {
+      setPromoError('Cupão inválido. Tente DJURTUS10 ou FRETEGRATIS');
+    }
+  };
 
   const handleSendWhatsAppOrder = (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,12 +95,16 @@ export const BagDrawer: React.FC<BagDrawerProps> = ({
     const messageText = `*NOVA ENCOMENDA — DJURTUS.STUDIO MARROCOS*\n\n` +
       `*Cliente:* ${fullName || 'Não informado'}\n` +
       `*Telefone:* ${phoneNumber || 'Não informado'}\n` +
-      `*Cidade/Local de entrega:* ${cityCountry}\n` +
+      `*Cidade em Marrocos:* ${selectedCity} (Entrega estimada: ${currentCityObj.time})\n` +
+      (appliedPromo ? `*Cupão Aplicado:* ${appliedPromo.code} (${appliedPromo.discountPercent}% OFF)\n` : '') +
       (notes ? `*Observações:* ${notes}\n\n` : '\n') +
       `*Itens da Encomenda:*\n${itemsSummary}\n\n` +
-      `*TOTAL:* ${totalMAD} MAD\n` +
+      `*Subtotal:* ${subtotalMAD} MAD\n` +
+      (discountAmountMAD > 0 ? `*Desconto (${appliedPromo?.code}):* -${discountAmountMAD} MAD\n` : '') +
+      `*Envio (${selectedCity}):* ${baseShippingFee === 0 ? 'GRÁTIS' : `${baseShippingFee} MAD`}\n` +
+      `*TOTAL FINAL:* ${finalTotalMAD} MAD\n` +
       `*Pagamento:* Sem cartão (A combinar no WhatsApp / Na entrega em Marrocos)\n\n` +
-      `Por favor confirmem a disponibilidade e prazo de entrega. Obrigado! 🇬🇼🇲🇦`;
+      `Por favor confirmem a disponibilidade e o prazo de entrega. Obrigado! 🇬🇼🇲🇦`;
 
     const encoded = encodeURIComponent(messageText);
     const waUrl = `https://wa.me/${selectedWhatsAppLine}?text=${encoded}`;
@@ -220,10 +265,49 @@ export const BagDrawer: React.FC<BagDrawerProps> = ({
                 </ul>
               </div>
 
+              {/* Módulo de Cupão de Desconto */}
+              <div className="bg-white rounded-2xl p-3.5 space-y-2">
+                <span className="block text-[11px] font-bold uppercase tracking-wider text-[#111110]">
+                  Cupão de Desconto
+                </span>
+
+                {appliedPromo ? (
+                  <div className="flex items-center justify-between p-2 rounded-lg bg-[#25D366]/10 text-xs font-bold text-[#188B46]">
+                    <span>Cupão {appliedPromo.code} Ativo!</span>
+                    <button
+                      type="button"
+                      onClick={() => setAppliedPromo(null)}
+                      className="text-[10px] text-[#A2141E] underline cursor-pointer"
+                    >
+                      Remover
+                    </button>
+                  </div>
+                ) : (
+                  <form onSubmit={handleApplyPromo} className="flex gap-2">
+                    <input
+                      type="text"
+                      value={promoCodeInput}
+                      onChange={(e) => setPromoCodeInput(e.target.value)}
+                      placeholder="Ex: DJURTUS10"
+                      className="flex-1 px-3 py-1.5 text-xs bg-[#f8f8f8] rounded-lg text-[#111110] focus:outline-none focus:ring-1 focus:ring-[#111110] uppercase"
+                    />
+                    <button
+                      type="submit"
+                      className="px-3 py-1.5 rounded-lg bg-[#111110] text-white text-xs font-bold hover:bg-[#222220] cursor-pointer whitespace-nowrap"
+                    >
+                      Aplicar
+                    </button>
+                  </form>
+                )}
+                {promoError && (
+                  <p className="text-[10px] text-[#A2141E] font-bold mt-1">{promoError}</p>
+                )}
+              </div>
+
               {/* Formulário Rápido para Envio no WhatsApp */}
-              <form id="whatsapp-order-form" onSubmit={handleSendWhatsAppOrder} className="space-y-3 pt-2">
+              <form id="whatsapp-order-form" onSubmit={handleSendWhatsAppOrder} className="space-y-3 pt-1">
                 <p className="text-xs font-bold text-[#111110] uppercase tracking-wider">
-                  Dados para Entrega em Marrocos
+                  Dados de Entrega em Marrocos
                 </p>
 
                 <div>
@@ -242,16 +326,19 @@ export const BagDrawer: React.FC<BagDrawerProps> = ({
 
                 <div>
                   <label className="block text-[11px] font-semibold text-[#111110] mb-1">
-                    Cidade / Bairro em Marrocos
+                    Cidade de Entrega em Marrocos
                   </label>
-                  <input
-                    type="text"
-                    required
-                    value={cityCountry}
-                    onChange={(e) => setCityCountry(e.target.value)}
-                    placeholder="Ex: Casablanca, Marrakech, Rabat, Tanger..."
-                    className="w-full px-3 py-2 text-xs bg-white rounded-lg text-[#111110] focus:outline-none focus:ring-2 focus:ring-[#25D366]"
-                  />
+                  <select
+                    value={selectedCity}
+                    onChange={(e) => setSelectedCity(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-white rounded-lg text-[#111110] font-semibold focus:outline-none focus:ring-2 focus:ring-[#25D366] cursor-pointer"
+                  >
+                    {MOROCCO_CITIES.map((c) => (
+                      <option key={c.name} value={c.name}>
+                        {c.name} ({c.time} · {c.fee === 0 || subtotalMAD >= 400 ? 'Portes Grátis' : `${c.fee} MAD`})
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
@@ -270,7 +357,7 @@ export const BagDrawer: React.FC<BagDrawerProps> = ({
                 {/* Seleção do número oficial de WhatsApp para atendimento */}
                 <div>
                   <label className="block text-[11px] font-semibold text-[#111110] mb-1">
-                    Enviar para qual contacto oficial:
+                    Atendimento WhatsApp:
                   </label>
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     {WHATSAPP_NUMBERS.map((wa) => (
@@ -298,7 +385,7 @@ export const BagDrawer: React.FC<BagDrawerProps> = ({
                     <span>Sem pagamento com cartão online</span>
                   </p>
                   <p>
-                    A encomenda envia uma mensagem direta pré-formatada para o nosso WhatsApp em Marrocos. Pagamento e entrega combinados diretamente connosco.
+                    A encomenda envia uma mensagem pré-formatada para o WhatsApp em Marrocos. Pagamento combinado diretamente na entrega.
                   </p>
                 </div>
               </form>
@@ -306,12 +393,33 @@ export const BagDrawer: React.FC<BagDrawerProps> = ({
           )}
         </div>
 
-        {/* Rodapé da Gaveta com Botão de Ação WhatsApp */}
+        {/* Rodapé da Gaveta com Resumo e Botão de Ação WhatsApp */}
         {items.length > 0 && (
           <div className="px-6 py-4 bg-white border-t border-black/5 space-y-3">
-            <div className="flex justify-between items-center text-sm font-bold text-[#111110]">
-              <span>Total da Encomenda</span>
-              <span className="font-mono tabular-nums text-lg text-[#111110]">{totalMAD} MAD</span>
+            <div className="space-y-1.5 text-xs text-[#555550]">
+              <div className="flex justify-between">
+                <span>Subtotal</span>
+                <span className="font-mono tabular-nums font-bold text-[#111110]">{subtotalMAD} MAD</span>
+              </div>
+
+              {discountAmountMAD > 0 && (
+                <div className="flex justify-between text-[#188B46] font-bold">
+                  <span>Desconto ({appliedPromo?.code})</span>
+                  <span className="font-mono tabular-nums">-{discountAmountMAD} MAD</span>
+                </div>
+              )}
+
+              <div className="flex justify-between">
+                <span>Envio ({selectedCity})</span>
+                <span className="font-mono tabular-nums font-bold text-[#111110]">
+                  {baseShippingFee === 0 ? 'GRÁTIS' : `${baseShippingFee} MAD`}
+                </span>
+              </div>
+
+              <div className="pt-2 border-t border-black/10 flex justify-between items-center text-sm font-bold text-[#111110]">
+                <span>Total a Pagar</span>
+                <span className="font-mono tabular-nums text-xl text-[#111110]">{finalTotalMAD} MAD</span>
+              </div>
             </div>
 
             <button

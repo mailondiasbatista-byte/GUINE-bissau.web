@@ -56,10 +56,29 @@ export const ProductDetailStudio: React.FC<ProductDetailStudioProps> = ({
     window.setTimeout(() => setJustAdded(false), 1400);
   };
 
+  const [isFitFinderOpen, setIsFitFinderOpen] = useState(false);
+  const [heightCm, setHeightCm] = useState(175);
+  const [weightKg, setWeightKg] = useState(72);
+
+  const [customName, setCustomName] = useState('');
+  const [customNumber, setCustomNumber] = useState('');
+
+  // Algoritmo de cálculo de tamanho recomendado com base em altura e peso
+  const calcRecommendedSize = () => {
+    const bmi = weightKg / Math.pow(heightCm / 100, 2);
+    if (heightCm < 170 || weightKg < 65) return 'P';
+    if (heightCm < 178 && weightKg < 76) return 'M';
+    if (heightCm < 186 && weightKg < 88) return 'G';
+    return 'GG';
+  };
+
+  const recommendedSize = calcRecommendedSize();
+
   const handleDirectWhatsAppOrder = () => {
     if (!isSizeAvailable) return;
+    const customText = customName || customNumber ? `\n• Personalização: ${customName || 'Sem Nome'} #${customNumber || 'S/N'}` : '';
     const message = encodeURIComponent(
-      `Olá Loja Djurtus Marrocos! Gostaria de encomendar:\n\n• Peça: ${product.name}\n• Tamanho: ${selectedSize}\n• Preço: ${product.priceMAD} MAD\n• Cor: ${product.colorway}\n\nPor favor, confirmem a disponibilidade para entrega em Marrocos. Obrigado!`
+      `Olá Loja Djurtus Marrocos! Gostaria de encomendar:\n\n• Peça: ${product.name}\n• Tamanho: ${selectedSize}${customText}\n• Preço: ${product.priceMAD} MAD\n• Cor: ${product.colorway}\n\nPor favor, confirmem a disponibilidade para entrega em Marrocos. Obrigado!`
     );
     window.open(`https://wa.me/${WHATSAPP_NUMBERS[0].clean}?text=${message}`, '_blank');
   };
@@ -249,6 +268,49 @@ export const ProductDetailStudio: React.FC<ProductDetailStudioProps> = ({
                   <Ruler className="w-3.5 h-3.5" />
                   <span>Medidas</span>
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setIsFitFinderOpen(true)}
+                  className="inline-flex items-center gap-1 text-[11px] text-[#188B46] font-bold bg-[#25D366]/10 px-2 py-1 rounded-md cursor-pointer whitespace-nowrap shrink-0"
+                >
+                  <span>Provador Virtual</span>
+                </button>
+              </div>
+
+              {/* Módulo de Personalização Oficial (Nome & Número) */}
+              <div className="pt-2 border-t border-black/5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-[#111110]">
+                    Personalizar Camisola (Nome &amp; Número):
+                  </span>
+                  <span className="text-[10px] text-[#188B46] font-bold uppercase tracking-wider">
+                    Oferta 0 MAD
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 mt-1.5">
+                  <input
+                    type="text"
+                    maxLength={14}
+                    value={customName}
+                    onChange={(e) => {
+                      setCustomName(e.target.value);
+                      setViewSide('back');
+                    }}
+                    placeholder="Nome nas costas"
+                    className="px-2.5 py-1.5 text-xs bg-[#F2F2F0] rounded-lg text-[#111110] uppercase font-bold focus:outline-none focus:ring-1 focus:ring-[#111110]"
+                  />
+                  <input
+                    type="text"
+                    maxLength={3}
+                    value={customNumber}
+                    onChange={(e) => {
+                      setCustomNumber(e.target.value.replace(/\D/g, ''));
+                      setViewSide('back');
+                    }}
+                    placeholder="Número"
+                    className="px-2.5 py-1.5 text-xs bg-[#F2F2F0] rounded-lg text-[#111110] font-mono font-bold focus:outline-none focus:ring-1 focus:ring-[#111110]"
+                  />
+                </div>
               </div>
 
               {/* Exibição do Estoque em Tempo Real do Tamanho Selecionado */}
@@ -280,14 +342,23 @@ export const ProductDetailStudio: React.FC<ProductDetailStudioProps> = ({
                     <button
                       type="button"
                       onClick={handleAdd}
-                      title="Adicionar à sacola"
-                      className={`p-2.5 rounded-lg text-xs font-medium transition-all shadow-xs ${
+                      className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all shadow-xs inline-flex items-center gap-2 cursor-pointer ${
                         justAdded
                           ? 'bg-[#111110] text-white'
-                          : 'bg-[#EFEFEF] text-[#111110] hover:bg-[#111110] hover:text-white cursor-pointer'
+                          : 'bg-[#111110] hover:bg-[#222220] text-white'
                       }`}
                     >
-                      {justAdded ? <Check className="w-4 h-4" /> : <ShoppingBag className="w-4 h-4" />}
+                      {justAdded ? (
+                        <>
+                          <Check className="w-4 h-4 text-[#25D366]" />
+                          <span>Adicionado!</span>
+                        </>
+                      ) : (
+                        <>
+                          <ShoppingBag className="w-4 h-4 text-[#25D366]" />
+                          <span>Adicionar à Sacola</span>
+                        </>
+                      )}
                     </button>
 
                     <button
@@ -387,6 +458,96 @@ export const ProductDetailStudio: React.FC<ProductDetailStudioProps> = ({
             <div className="mt-4 p-3 rounded-xl bg-[#25D366]/10 text-xs text-[#188B46] flex items-center gap-2 font-medium">
               <MessageCircle className="w-4 h-4 shrink-0" />
               <span>Dúvida no tamanho? Fale connosco pelo WhatsApp para conselho imediato.</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Interativo do Provador Virtual */}
+      {isFitFinderOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="fit-finder-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs"
+          onClick={() => setIsFitFinderOpen(false)}
+        >
+          <div
+            className="w-full max-w-md bg-white rounded-2xl p-6 shadow-xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-black/10">
+              <div>
+                <h3 id="fit-finder-title" className="text-base font-bold text-[#111110]">
+                  Provador Virtual Djurtus
+                </h3>
+                <p className="text-xs text-[#666660] mt-0.5">
+                  Recomendação de tamanho com base nas suas medidas
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsFitFinderOpen(false)}
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-[#666660] hover:text-[#111110] hover:bg-black/5 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4 pt-1">
+              <div>
+                <div className="flex justify-between text-xs font-bold text-[#111110] mb-1">
+                  <span>A sua Altura:</span>
+                  <span className="font-mono">{heightCm} cm</span>
+                </div>
+                <input
+                  type="range"
+                  min={150}
+                  max={210}
+                  value={heightCm}
+                  onChange={(e) => setHeightCm(Number(e.target.value))}
+                  className="w-full accent-[#111110] cursor-pointer"
+                />
+              </div>
+
+              <div>
+                <div className="flex justify-between text-xs font-bold text-[#111110] mb-1">
+                  <span>O seu Peso:</span>
+                  <span className="font-mono">{weightKg} kg</span>
+                </div>
+                <input
+                  type="range"
+                  min={45}
+                  max={120}
+                  value={weightKg}
+                  onChange={(e) => setWeightKg(Number(e.target.value))}
+                  className="w-full accent-[#111110] cursor-pointer"
+                />
+              </div>
+
+              {/* Resultado Recomendado */}
+              <div className="bg-[#f8f8f8] rounded-xl p-4 text-center border border-black/5 space-y-2">
+                <span className="text-[10px] uppercase tracking-wider font-bold text-[#666660]">
+                  Tamanho Recomendado
+                </span>
+                <div className="text-3xl font-black font-display text-[#111110]">
+                  Tamanho {recommendedSize}
+                </div>
+                <p className="text-xs text-[#555550]">
+                  Corte ideal para a sua estrutura corporal ({heightCm} cm · {weightKg} kg).
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedSize(recommendedSize);
+                  setIsFitFinderOpen(false);
+                }}
+                className="w-full py-3 rounded-xl bg-[#111110] text-white text-xs font-bold hover:bg-[#222220] cursor-pointer transition-colors"
+              >
+                Selecionar Tamanho {recommendedSize} na Loja
+              </button>
             </div>
           </div>
         </div>

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ChevronLeft, ChevronRight, MessageCircle, XCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, MessageCircle, XCircle, ShoppingBag, Check } from 'lucide-react';
 import { ProductItem, WHATSAPP_NUMBERS } from '../data/products';
 
 interface RackShowcaseProps {
@@ -9,6 +9,7 @@ interface RackShowcaseProps {
   onSelectIndex: (index: number) => void;
   onInspectProduct: () => void;
   onQuickWhatsApp: (product: ProductItem) => void;
+  onAddToBag: (product: ProductItem, size: string) => void;
 }
 
 export const RackShowcase: React.FC<RackShowcaseProps> = ({
@@ -18,8 +19,11 @@ export const RackShowcase: React.FC<RackShowcaseProps> = ({
   onSelectIndex,
   onInspectProduct,
   onQuickWhatsApp,
+  onAddToBag,
 }) => {
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
+  const [justAddedRack, setJustAddedRack] = useState(false);
+  const [addedItemKey, setAddedItemKey] = useState<string | null>(null);
   const activeProduct = products[selectedIndex] ?? products[0];
 
   const prodStock = stockData[activeProduct.id] ?? {
@@ -157,6 +161,39 @@ export const RackShowcase: React.FC<RackShowcaseProps> = ({
                         </div>
                       )}
                     </div>
+
+                    {/* Botão rápido Adicionar à Sacola em cada produto da arara */}
+                    {itemIsAvailable && (
+                      <div className="mt-2 pt-1 border-t border-black/5 flex items-center justify-center">
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onAddToBag(item, 'G');
+                            setAddedItemKey(itemKey);
+                            setTimeout(() => setAddedItemKey(null), 1400);
+                          }}
+                          className={`w-full py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 shadow-2xs ${
+                            addedItemKey === itemKey
+                              ? 'bg-[#111110] text-white'
+                              : 'bg-white hover:bg-[#111110] hover:text-white text-[#111110]'
+                          }`}
+                        >
+                          {addedItemKey === itemKey ? (
+                            <>
+                              <Check className="w-3 h-3 text-[#25D366]" />
+                              <span>Adicionado!</span>
+                            </>
+                          ) : (
+                            <>
+                              <ShoppingBag className="w-3 h-3 text-[#25D366]" />
+                              <span>Adicionar à Sacola</span>
+                            </>
+                          )}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </button>
               );
@@ -205,12 +242,36 @@ export const RackShowcase: React.FC<RackShowcaseProps> = ({
           </button>
         </div>
 
-        {/* Botões de Ação: Ver Detalhes e Encomendar por WhatsApp */}
+        {/* Botões de Ação: Adicionar à Sacola, Ver Detalhes e Encomendar por WhatsApp */}
         <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+          {isAvailable && (
+            <button
+              type="button"
+              onClick={() => {
+                onAddToBag(activeProduct, 'G');
+                setJustAddedRack(true);
+                setTimeout(() => setJustAddedRack(false), 1500);
+              }}
+              className="px-6 py-2.5 rounded-full bg-[#111110] hover:bg-[#222220] text-white text-xs font-bold inline-flex items-center gap-2 transition-all whitespace-nowrap cursor-pointer shadow-xs"
+            >
+              {justAddedRack ? (
+                <>
+                  <Check className="w-4 h-4 text-[#25D366]" />
+                  <span>Adicionado à Sacola!</span>
+                </>
+              ) : (
+                <>
+                  <ShoppingBag className="w-4 h-4 text-[#25D366]" />
+                  <span>Adicionar à Sacola ({activeProduct.priceMAD} MAD)</span>
+                </>
+              )}
+            </button>
+          )}
+
           <button
             type="button"
             onClick={onInspectProduct}
-            className="px-6 py-2.5 rounded-full bg-[#111110] text-white hover:bg-[#222220] text-xs font-bold transition-all whitespace-nowrap cursor-pointer shadow-xs"
+            className="px-6 py-2.5 rounded-full bg-white border border-black/10 hover:border-black/30 text-[#111110] text-xs font-bold transition-all whitespace-nowrap cursor-pointer shadow-2xs"
           >
             Ver Detalhes &amp; Tamanhos
           </button>
